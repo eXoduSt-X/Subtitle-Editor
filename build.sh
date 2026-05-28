@@ -25,11 +25,15 @@ if [ -z "$ANDROID_JAR" ]; then
     exit 1
 fi
 
-# 2. Localizar el AAPT2 correcto dentro de build-tools
+# 2. Localizar herramientas correctas dentro de build-tools (AAPT2 y D8)
 AAPT2_BIN=$(find $SDK_ROOT/build-tools/ -name "aapt2" | sort -V | tail -n 1 2>/dev/null || echo "aapt2")
+D8_BIN=$(find $SDK_ROOT/build-tools/ -name "d8" | sort -V | tail -n 1 2>/dev/null || echo "")
 
 echo "-> Usando SDK: $ANDROID_JAR"
 echo "-> Usando AAPT2: $AAPT2_BIN"
+if [ -n "$D8_BIN" ]; then
+    echo "-> Usando D8: $D8_BIN"
+fi
 
 echo "[1/5] Limpiando entorno..."
 rm -rf $BUILD_DIR
@@ -44,7 +48,6 @@ $AAPT2_BIN link --manifest app/src/main/AndroidManifest.xml \
     build/resources.zip
 
 echo "[3/5] Compilando código fuente Java..."
-# CORRECCIÓN: Se añade '-proc:none' para evitar el fallo del BatchAnnotationProcessorManager en ecj
 ecj -source 1.8 -target 1.8 -proc:none -d $OBJ_DIR -cp "$ANDROID_JAR" \
     $GEN_DIR/$PACKAGE/R.java \
     app/src/main/java/$PACKAGE/MainActivity.java
@@ -52,10 +55,16 @@ ecj -source 1.8 -target 1.8 -proc:none -d $OBJ_DIR -cp "$ANDROID_JAR" \
 echo "[4/5] Convirtiendo clases a formato Dalvik (.dex)..."
 CLASS_FILES=$(find $OBJ_DIR -name "*.class")
 
-if command -v d8 &> /dev/null; then
+# CORRECCIÓN: Priorizar el D8 del SDK de Android localizado dinámicamente
+if [ -n "$D8_BIN" ]; then
+    $D8_BIN --output build/classes.dex --lib "$ANDROID_JAR" $CLASS_FILES
+elif command -v d8 &> /dev/null; then
     d8 --output build/classes.dex --lib "$ANDROID_JAR" $CLASS_FILES
-else
+elif command -v dx &> /dev/null; then
     dx --dex --output=build/classes.dex $OBJ_DIR
+else
+    echo "Error: No se encontró d8 ni dx en las herramientas del SDK."
+    exit 1
 fi
 
 # Añadir el archivo dex dentro del APK generado
