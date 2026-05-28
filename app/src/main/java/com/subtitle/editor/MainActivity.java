@@ -15,6 +15,7 @@ public class MainActivity extends Activity {
     MediaPlayer mediaPlayer;
     EditText etLyrics;
     Button btnMark, btnPlayPause, btnSelect, btnSave, btnFwd, btnRew;
+    Button btnUp, btnDown, btnLeft, btnRight; // Nuevos botones de dirección
     TextView tvTime;
     SeekBar sbProgress; 
     String songName = "LetraSincronizada";
@@ -34,6 +35,12 @@ public class MainActivity extends Activity {
         btnRew = (Button) findViewById(R.id.btnRew);
         tvTime = (TextView) findViewById(R.id.tvCurrentTime);
         sbProgress = (SeekBar) findViewById(R.id.sbProgress); 
+
+        // Vinculación de los nuevos botones de dirección
+        btnUp = (Button) findViewById(R.id.btnUp);
+        btnDown = (Button) findViewById(R.id.btnDown);
+        btnLeft = (Button) findViewById(R.id.btnLeft);
+        btnRight = (Button) findViewById(R.id.btnRight);
 
         // Forzamos al EditText a aceptar y mantener múltiples líneas en tiempo de ejecución
         etLyrics.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
@@ -86,7 +93,34 @@ public class MainActivity extends Activity {
             @Override public void onClick(View v) { saveFile(); }
         });
 
-        // Configuración de interacción del usuario con la barra de progreso
+        // Configuración de los clicks de dirección de texto
+        btnLeft.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                int pos = etLyrics.getSelectionStart();
+                if (pos > 0) etLyrics.setSelection(pos - 1);
+            }
+        });
+
+        btnRight.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                int pos = etLyrics.getSelectionStart();
+                if (pos < etLyrics.getText().length()) etLyrics.setSelection(pos + 1);
+            }
+        });
+
+        btnUp.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                moveCursorLine(-1);
+            }
+        });
+
+        btnDown.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                moveCursorLine(1);
+            }
+        });
+
+        // Interacción del usuario con la barra de progreso
         sbProgress.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -95,17 +129,50 @@ public class MainActivity extends Activity {
                     tvTime.setText(formatTime(progress));
                 }
             }
-
             @Override public void onStartTrackingTouch(SeekBar seekBar) { isUserSeeking = true; }
             @Override public void onStopTrackingTouch(SeekBar seekBar) { isUserSeeking = false; }
         });
+    }
+
+    // Método auxiliar para mover el cursor verticalmente (Arriba/Abajo) entre líneas de texto plano
+    private void moveCursorLine(int direction) {
+        int pos = etLyrics.getSelectionStart();
+        String text = etLyrics.getText().toString();
+        if (text.isEmpty()) return;
+
+        // Encontrar los límites de la línea actual
+        int currentLineStart = text.lastIndexOf("\n", pos - 1) + 1;
+        int currentLineEnd = text.indexOf("\n", pos);
+        if (currentLineEnd == -1) currentLineEnd = text.length();
+
+        // Calcular la columna actual (offset desde el inicio de la línea)
+        int column = pos - currentLineStart;
+
+        if (direction == -1) { // Mover arriba
+            if (currentLineStart <= 0) return; // Ya está en la primera línea
+            int prevLineStart = text.lastIndexOf("\n", currentLineStart - 2) + 1;
+            int prevLineEnd = currentLineStart - 1;
+            int prevLineLength = prevLineEnd - prevLineStart;
+            
+            // Colocamos el cursor en la misma columna o al final de la línea si es más corta
+            int targetPos = prevLineStart + Math.min(column, prevLineLength);
+            etLyrics.setSelection(targetPos);
+        } else if (direction == 1) { // Mover abajo
+            if (currentLineEnd >= text.length()) return; // Ya está en la última línea
+            int nextLineStart = currentLineEnd + 1;
+            int nextLineEnd = text.indexOf("\n", nextLineStart);
+            if (nextLineEnd == -1) nextLineEnd = text.length();
+            int nextLineLength = nextLineEnd - nextLineStart;
+
+            int targetPos = nextLineStart + Math.min(column, nextLineLength);
+            etLyrics.setSelection(targetPos);
+        }
     }
 
     private void handleMarking() {
         if (mediaPlayer == null) return;
         int pos = etLyrics.getSelectionStart();
         
-        // Normalizamos los saltos de línea al recuperar el texto para evitar que colapse
         String text = etLyrics.getText().toString().replace("\r\n", "\n").replace("\r", "\n");
         if (text.isEmpty()) return;
 
@@ -142,12 +209,9 @@ public class MainActivity extends Activity {
         if (mediaPlayer != null && mediaPlayer.isPlaying()) {
             int currentPos = mediaPlayer.getCurrentPosition();
             tvTime.setText(formatTime(currentPos));
-            
-            // Si el usuario no está arrastrando el control, la barra se mueve sola
             if (!isUserSeeking) {
                 sbProgress.setProgress(currentPos);
             }
-            
             tvTime.postDelayed(new Runnable() {
                 @Override public void run() { updateTimer(); }
             }, 100);
@@ -170,13 +234,11 @@ public class MainActivity extends Activity {
             Uri uri = data.getData();
             mediaPlayer = MediaPlayer.create(this, uri);
             
-            // Sincronizamos la duración total del archivo de audio con la barra
             if (mediaPlayer != null) {
                 sbProgress.setMax(mediaPlayer.getDuration());
                 sbProgress.setProgress(0);
             }
             
-            // Intentamos extraer el nombre real del archivo MP3
             Cursor c = getContentResolver().query(uri, null, null, null, null);
             if (c != null && c.moveToFirst()) {
                 int i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
