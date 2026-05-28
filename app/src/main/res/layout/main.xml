@@ -6,6 +6,20 @@
     android:padding="8dp"
     android:background="#121212">
 
+    <FrameLayout
+        android:id="@+id/videoContainer"
+        android:layout_width="match_parent"
+        android:layout_height="160dp"
+        android:background="#000000"
+        android:layout_marginBottom="4dp">
+
+        <VideoView
+            android:id="@+id/videoView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center" />
+    </FrameLayout>
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -26,7 +40,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1.1"
-                android:text="🎵 AUDIO"
+                android:text="🎵 MULTIMEDIA"
                 android:textSize="11sp"
                 android:layout_marginRight="2dp" />
 
@@ -158,23 +172,3 @@
                 android:layout_width="0dp"
                 android:layout_height="40dp"
                 android:layout_weight="1"
-                android:text="▶"
-                android:textSize="12sp"
-                android:layout_marginLeft="2dp" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <EditText
-        android:id="@+id/etLyrics"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:gravity="top|left"
-        android:hint="Pega la letra aquí o carga un archivo .lrc..."
-        android:inputType="textMultiLine"
-        android:background="#1A1A1A"
-        android:textColor="#FFFFFF"
-        android:padding="10dp"
-        android:scrollbars="vertical" />
-
-</LinearLayout>
