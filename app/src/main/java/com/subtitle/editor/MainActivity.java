@@ -32,6 +32,10 @@ public class MainActivity extends Activity {
         btnRew = (Button) findViewById(R.id.btnRew);
         tvTime = (TextView) findViewById(R.id.tvCurrentTime);
 
+        // MEJORA: Forzamos al EditText a aceptar y mantener múltiples líneas en tiempo de ejecución
+        etLyrics.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        etLyrics.setSingleLine(false);
+
         btnSelect.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 Intent i = new Intent(Intent.ACTION_GET_CONTENT);
@@ -75,7 +79,9 @@ public class MainActivity extends Activity {
     private void handleMarking() {
         if (mediaPlayer == null) return;
         int pos = etLyrics.getSelectionStart();
-        String text = etLyrics.getText().toString();
+        
+        // MEJORA: Normalizamos los saltos de línea al recuperar el texto para evitar que colapse
+        String text = etLyrics.getText().toString().replace("\r\n", "\n").replace("\r", "\n");
         if (text.isEmpty()) return;
 
         int lineStart = text.lastIndexOf("\n", pos - 1) + 1;
@@ -122,7 +128,7 @@ public class MainActivity extends Activity {
             PrintWriter pw = new PrintWriter(new FileWriter(f));
             pw.print(etLyrics.getText().toString());
             pw.close();
-            Toast.makeText(this, "Guardado: " + songName, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Guardado: " + songName + ".lrc", Toast.LENGTH_SHORT).show();
         } catch (Exception e) { e.printStackTrace(); }
     }
 
@@ -131,14 +137,28 @@ public class MainActivity extends Activity {
         if (resultCode == RESULT_OK && data != null) {
             Uri uri = data.getData();
             mediaPlayer = MediaPlayer.create(this, uri);
+            
+            // Intentamos extraer el nombre real del archivo MP3
             Cursor c = getContentResolver().query(uri, null, null, null, null);
             if (c != null && c.moveToFirst()) {
                 int i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                songName = c.getString(i).replaceAll("\\.[^.]*$", "");
+                if (i != -1) {
+                    // Quitamos la extensión (ej: .mp3) de forma segura para usar el nombre limpio
+                    songName = c.getString(i).replaceAll("\\.[^.]*$", "");
+                }
                 c.close();
+            } else if (uri.getPath() != null) {
+                // Fallback por si no da metadatos de cursor de contenido estructurado
+                String path = uri.getPath();
+                int cut = path.lastIndexOf('/');
+                if (cut != -1) {
+                    songName = path.substring(cut + 1).replaceAll("\\.[^.]*$", "");
+                }
             }
+            
+            // MEJORA: Modificamos el texto del botón dinámicamente para mostrar el nombre cargado
+            btnSelect.setText("🎵 " + songName);
             Toast.makeText(this, "Cargado: " + songName, Toast.LENGTH_SHORT).show();
         }
     }
 }
-
