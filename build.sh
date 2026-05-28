@@ -96,5 +96,14 @@ if [ ! -f debug.keystore ]; then
         -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
 fi
 
-# Buscamos apksigner oficial en las herramientas del SDK
-APKSIGNER_BIN=$(find $
+# Buscamos apksigner oficial en las herramientas del SDK (Sintaxis corregida)
+APKSIGNER_BIN=$(find $SDK_ROOT/build-tools/ -name "apksigner" | sort -V | tail -n 1 2>/dev/null)
+if [ -z "$APKSIGNER_BIN" ]; then
+    APKSIGNER_BIN="apksigner"
+fi
+
+$APKSIGNER_BIN sign --ks debug.keystore --ks-pass pass:android --out build/$APP_NAME-signed.apk build/$APP_NAME.apk
+
+echo "----------------------------------------"
+echo "¡ÉXITO! APK generado en: build/$APP_NAME-signed.apk"
+echo "----------------------------------------"
