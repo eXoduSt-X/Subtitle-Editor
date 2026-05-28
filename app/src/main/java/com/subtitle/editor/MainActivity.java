@@ -45,7 +45,6 @@ public class MainActivity extends Activity {
         btnRight = (Button) findViewById(R.id.btnRight);
         btnLoadLrc = (Button) findViewById(R.id.btnLoadLrc);
 
-        // Ocultamos el contenedor de video al iniciar hasta que se cargue un MP4
         videoContainer.setVisibility(View.GONE);
 
         etLyrics.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -63,13 +62,11 @@ public class MainActivity extends Activity {
 
         btnLoadLrc.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                Intent i = new Intent(Intent.ACTION_GET_CONTENT);
-                i.setType("*/*"); 
+                // CAMBIO ESTRATÉGICO: Usamos ACTION_OPEN_DOCUMENT para saltar el filtro estricto de MIME types
+                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
-                
-                String[] mimeTypes = {"text/plain", "application/octet-stream", "text/*"};
-                i.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
-                
+                // Le indicamos que acepte cualquier flujo de datos plano
+                i.setType("*/*"); 
                 startActivityForResult(i, 2);
             }
         });
@@ -248,7 +245,6 @@ public class MainActivity extends Activity {
             
             if (requestCode == 1) {
                 extractSongName(uri);
-                
                 btnSelect.setText("🎬 " + songName);
                 
                 videoContainer.setVisibility(View.VISIBLE);
@@ -276,7 +272,7 @@ public class MainActivity extends Activity {
             else if (requestCode == 2) {
                 try {
                     InputStream is = getContentResolver().openInputStream(uri);
-                    BufferedReader br = new BufferedReader(new InputStreamReader(is));
+                    BufferedReader br = new BufferedReader(new InputStreamReader(is, "UTF-8"));
                     StringBuilder sb = new StringBuilder();
                     String line;
                     while ((line = br.readLine()) != null) {
@@ -285,7 +281,16 @@ public class MainActivity extends Activity {
                     br.close();
                     is.close();
                     
-                    String lrcContent = sb.toString().replace("\r\n", "\n").replace("\r", "\n");
+                    String lrcContent = sb.toString();
+                    
+                    // Limpieza del BOM "ÿþ" inicial de codificaciones Windows en los .lrc
+                    if (lrcContent.startsWith("ÿþ") || lrcContent.startsWith("\uFEFF") || lrcContent.startsWith("\uFFFE")) {
+                        lrcContent = lrcContent.substring(2);
+                    } else if (lrcContent.length() > 0 && (lrcContent.charAt(0) == 'ÿ' || lrcContent.charAt(0) == 'þ')) {
+                        lrcContent = lrcContent.substring(1);
+                    }
+                    
+                    lrcContent = lrcContent.replace("\r\n", "\n").replace("\r", "\n");
                     etLyrics.setText(lrcContent);
                     
                     extractSongName(uri);
