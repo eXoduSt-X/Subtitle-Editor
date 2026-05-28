@@ -15,7 +15,7 @@ public class MainActivity extends Activity {
     MediaPlayer mediaPlayer;
     EditText etLyrics;
     Button btnMark, btnPlayPause, btnSelect, btnSave, btnFwd, btnRew;
-    Button btnUp, btnDown, btnLeft, btnRight; // Nuevos botones de dirección
+    Button btnUp, btnDown, btnLeft, btnRight, btnLoadLrc; // Agregado btnLoadLrc
     TextView tvTime;
     SeekBar sbProgress; 
     String songName = "LetraSincronizada";
@@ -36,11 +36,11 @@ public class MainActivity extends Activity {
         tvTime = (TextView) findViewById(R.id.tvCurrentTime);
         sbProgress = (SeekBar) findViewById(R.id.sbProgress); 
 
-        // Vinculación de los nuevos botones de dirección
         btnUp = (Button) findViewById(R.id.btnUp);
         btnDown = (Button) findViewById(R.id.btnDown);
         btnLeft = (Button) findViewById(R.id.btnLeft);
         btnRight = (Button) findViewById(R.id.btnRight);
+        btnLoadLrc = (Button) findViewById(R.id.btnLoadLrc); // Vinculación del nuevo botón
 
         // Forzamos al EditText a aceptar y mantener múltiples líneas en tiempo de ejecución
         etLyrics.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
@@ -50,7 +50,15 @@ public class MainActivity extends Activity {
             @Override public void onClick(View v) {
                 Intent i = new Intent(Intent.ACTION_GET_CONTENT);
                 i.setType("audio/*");
-                startActivityForResult(i, 1);
+                startActivityForResult(i, 1); // RequestCode 1 para Audio
+            }
+        });
+
+        btnLoadLrc.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+                i.setType("text/*"); // Filtra archivos de texto y subtítulos (.lrc, .txt)
+                startActivityForResult(i, 2); // RequestCode 2 para LRC
             }
         });
 
@@ -93,7 +101,6 @@ public class MainActivity extends Activity {
             @Override public void onClick(View v) { saveFile(); }
         });
 
-        // Configuración de los clicks de dirección de texto
         btnLeft.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 int pos = etLyrics.getSelectionStart();
@@ -109,18 +116,13 @@ public class MainActivity extends Activity {
         });
 
         btnUp.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                moveCursorLine(-1);
-            }
+            @Override public void onClick(View v) { moveCursorLine(-1); }
         });
 
         btnDown.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                moveCursorLine(1);
-            }
+            @Override public void onClick(View v) { moveCursorLine(1); }
         });
 
-        // Interacción del usuario con la barra de progreso
         sbProgress.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -134,36 +136,30 @@ public class MainActivity extends Activity {
         });
     }
 
-    // Método auxiliar para mover el cursor verticalmente (Arriba/Abajo) entre líneas de texto plano
     private void moveCursorLine(int direction) {
         int pos = etLyrics.getSelectionStart();
         String text = etLyrics.getText().toString();
         if (text.isEmpty()) return;
 
-        // Encontrar los límites de la línea actual
         int currentLineStart = text.lastIndexOf("\n", pos - 1) + 1;
         int currentLineEnd = text.indexOf("\n", pos);
         if (currentLineEnd == -1) currentLineEnd = text.length();
 
-        // Calcular la columna actual (offset desde el inicio de la línea)
         int column = pos - currentLineStart;
 
-        if (direction == -1) { // Mover arriba
-            if (currentLineStart <= 0) return; // Ya está en la primera línea
+        if (direction == -1) {
+            if (currentLineStart <= 0) return;
             int prevLineStart = text.lastIndexOf("\n", currentLineStart - 2) + 1;
             int prevLineEnd = currentLineStart - 1;
             int prevLineLength = prevLineEnd - prevLineStart;
-            
-            // Colocamos el cursor en la misma columna o al final de la línea si es más corta
             int targetPos = prevLineStart + Math.min(column, prevLineLength);
             etLyrics.setSelection(targetPos);
-        } else if (direction == 1) { // Mover abajo
-            if (currentLineEnd >= text.length()) return; // Ya está en la última línea
+        } else if (direction == 1) {
+            if (currentLineEnd >= text.length()) return;
             int nextLineStart = currentLineEnd + 1;
             int nextLineEnd = text.indexOf("\n", nextLineStart);
             if (nextLineEnd == -1) nextLineEnd = text.length();
             int nextLineLength = nextLineEnd - nextLineStart;
-
             int targetPos = nextLineStart + Math.min(column, nextLineLength);
             etLyrics.setSelection(targetPos);
         }
@@ -232,30 +228,61 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (resultCode == RESULT_OK && data != null) {
             Uri uri = data.getData();
-            mediaPlayer = MediaPlayer.create(this, uri);
             
-            if (mediaPlayer != null) {
-                sbProgress.setMax(mediaPlayer.getDuration());
-                sbProgress.setProgress(0);
-            }
-            
-            Cursor c = getContentResolver().query(uri, null, null, null, null);
-            if (c != null && c.moveToFirst()) {
-                int i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                if (i != -1) {
-                    songName = c.getString(i).replaceAll("\\.[^.]*$", "");
+            // CASO 1: Procesar archivo de audio MP3
+            if (requestCode == 1) {
+                mediaPlayer = MediaPlayer.create(this, uri);
+                if (mediaPlayer != null) {
+                    sbProgress.setMax(mediaPlayer.getDuration());
+                    sbProgress.setProgress(0);
                 }
-                c.close();
-            } else if (uri.getPath() != null) {
-                String path = uri.getPath();
-                int cut = path.lastIndexOf('/');
-                if (cut != -1) {
-                    songName = path.substring(cut + 1).replaceAll("\\.[^.]*$", "");
+                extractSongName(uri);
+                btnSelect.setText("🎵 " + songName);
+                Toast.makeText(this, "Audio: " + songName, Toast.LENGTH_SHORT).show();
+            } 
+            
+            // CASO 2: Procesar y cargar archivo .lrc externo
+            else if (requestCode == 2) {
+                try {
+                    InputStream is = getContentResolver().openInputStream(uri);
+                    BufferedReader br = new BufferedReader(new InputStreamReader(is));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        sb.append(line).append("\n");
+                    }
+                    br.close();
+                    is.close();
+                    
+                    // Inyectamos el texto limpio respetando sus saltos originales
+                    etLyrics.setText(sb.toString().replace("\r\n", "\n").replace("\r", "\n"));
+                    
+                    extractSongName(uri);
+                    btnLoadLrc.setText("📂 " + songName);
+                    Toast.makeText(this, "LRC Cargado: " + songName, Toast.LENGTH_SHORT).show();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    Toast.makeText(this, "Error al leer el archivo LRC", Toast.LENGTH_SHORT).show();
                 }
             }
-            
-            btnSelect.setText("🎵 " + songName);
-            Toast.makeText(this, "Cargado: " + songName, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // Método auxiliar unificado para renombrar songName dinámicamente
+    private void extractSongName(Uri uri) {
+        Cursor c = getContentResolver().query(uri, null, null, null, null);
+        if (c != null && c.moveToFirst()) {
+            int i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+            if (i != -1) {
+                songName = c.getString(i).replaceAll("\\.[^.]*$", "");
+            }
+            c.close();
+        } else if (uri.getPath() != null) {
+            String path = uri.getPath();
+            int cut = path.lastIndexOf('/');
+            if (cut != -1) {
+                songName = path.substring(cut + 1).replaceAll("\\.[^.]*$", "");
+            }
         }
     }
 }
