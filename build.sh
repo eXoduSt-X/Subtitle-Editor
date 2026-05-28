@@ -1,18 +1,16 @@
-cat << 'EOF' > build.sh
 #!/bin/bash
 set -e
 
 # Configuración de nombres y rutas
-APP_NAME="lrcmaker"
-PACKAGE="com/ejemplo/lrc"
+APP_NAME="SubtitleEditor"
+PACKAGE="com/subtitle/editor"
 BUILD_DIR="build"
 GEN_DIR="build/gen"
 OBJ_DIR="build/obj"
 
-# Intentar localizar el SDK mínimo en Termux
+# Intentar localizar el SDK mínimo en Termux o entornos Linux estándar
 ANDROID_JAR=$(find $PREFIX/share/android-sdk/platforms/ -name "android.jar" | sort -V | tail -n 1 2>/dev/null || echo "")
 if [ -z "$ANDROID_JAR" ]; then
-    # Ruta alternativa común si usas paquetes personalizados
     ANDROID_JAR="$HOME/android-sdk/platforms/android-26/android.jar"
 fi
 
@@ -60,5 +58,3 @@ apksigner sign --ks debug.keystore --ks-pass pass:android --out build/$APP_NAME-
 echo "----------------------------------------"
 echo "¡ÉXITO! APK generado en: build/$APP_NAME-signed.apk"
 echo "----------------------------------------"
-EOF
-chmod +x build.sh
