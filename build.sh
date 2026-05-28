@@ -25,8 +25,7 @@ if [ -z "$ANDROID_JAR" ]; then
     exit 1
 fi
 
-# 2. SOLUCIÓN AL ERROR: Localizar el AAPT2 correcto dentro de build-tools
-# Buscamos el binario de aapt2 más actualizado del SDK, si no existe, usamos el global
+# 2. Localizar el AAPT2 correcto dentro de build-tools
 AAPT2_BIN=$(find $SDK_ROOT/build-tools/ -name "aapt2" | sort -V | tail -n 1 2>/dev/null || echo "aapt2")
 
 echo "-> Usando SDK: $ANDROID_JAR"
@@ -37,7 +36,6 @@ rm -rf $BUILD_DIR
 mkdir -p $GEN_DIR $OBJ_DIR
 
 echo "[2/5] Procesando recursos de la interfaz (AAPT2)..."
-# Usamos el AAPT2 localizado del SDK
 $AAPT2_BIN compile --dir app/src/main/res -o build/resources.zip
 $AAPT2_BIN link --manifest app/src/main/AndroidManifest.xml \
     -I "$ANDROID_JAR" \
@@ -46,20 +44,23 @@ $AAPT2_BIN link --manifest app/src/main/AndroidManifest.xml \
     build/resources.zip
 
 echo "[3/5] Compilando código fuente Java..."
-ecj -d $OBJ_DIR -cp "$ANDROID_JAR" \
+# CORRECCIÓN: Se añadieron los flags -source 1.8 y -target 1.8 para dar soporte a anotaciones y varargs
+ecj -source 1.8 -target 1.8 -d $OBJ_DIR -cp "$ANDROID_JAR" \
     $GEN_DIR/$PACKAGE/R.java \
     app/src/main/java/$PACKAGE/MainActivity.java
 
 echo "[4/5] Convirtiendo clases a formato Dalvik (.dex)..."
+# Buscamos de forma dinámica todos los archivos .class generados para evitar problemas de rutas fijas
+CLASS_FILES=$(find $OBJ_DIR -name "*.class")
+
 if command -v d8 &> /dev/null; then
-    d8 --output build/classes.dex --lib "$ANDROID_JAR" $OBJ_DIR/$PACKAGE/*.class
+    d8 --output build/classes.dex --lib "$ANDROID_JAR" $CLASS_FILES
 else
     dx --dex --output=build/classes.dex $OBJ_DIR
 fi
 
 # Añadir el archivo dex dentro del APK generado
 cd build
-# También es recomendable usar el aapt del SDK si da problemas, pero 'add' suele ser más noble
 aapt add unaligned.apk classes.dex > /dev/null
 cd ..
 
