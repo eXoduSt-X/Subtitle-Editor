@@ -44,13 +44,12 @@ $AAPT2_BIN link --manifest app/src/main/AndroidManifest.xml \
     build/resources.zip
 
 echo "[3/5] Compilando código fuente Java..."
-# CORRECCIÓN: Se añadieron los flags -source 1.8 y -target 1.8 para dar soporte a anotaciones y varargs
-ecj -source 1.8 -target 1.8 -d $OBJ_DIR -cp "$ANDROID_JAR" \
+# CORRECCIÓN: Se añade '-proc:none' para evitar el fallo del BatchAnnotationProcessorManager en ecj
+ecj -source 1.8 -target 1.8 -proc:none -d $OBJ_DIR -cp "$ANDROID_JAR" \
     $GEN_DIR/$PACKAGE/R.java \
     app/src/main/java/$PACKAGE/MainActivity.java
 
 echo "[4/5] Convirtiendo clases a formato Dalvik (.dex)..."
-# Buscamos de forma dinámica todos los archivos .class generados para evitar problemas de rutas fijas
 CLASS_FILES=$(find $OBJ_DIR -name "*.class")
 
 if command -v d8 &> /dev/null; then
