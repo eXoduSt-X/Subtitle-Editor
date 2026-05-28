@@ -55,11 +55,11 @@ ecj -source 1.8 -target 1.8 -proc:none -d $OBJ_DIR -cp "$ANDROID_JAR" \
 echo "[4/5] Convirtiendo clases a formato Dalvik (.dex)..."
 CLASS_FILES=$(find $OBJ_DIR -name "*.class")
 
-# CORRECCIÓN: Priorizar el D8 del SDK de Android localizado dinámicamente
+# CORRECCIÓN AQUÍ: Se cambió '--output build/classes.dex' por '--output build'
 if [ -n "$D8_BIN" ]; then
-    $D8_BIN --output build/classes.dex --lib "$ANDROID_JAR" $CLASS_FILES
+    $D8_BIN --output build --lib "$ANDROID_JAR" $CLASS_FILES
 elif command -v d8 &> /dev/null; then
-    d8 --output build/classes.dex --lib "$ANDROID_JAR" $CLASS_FILES
+    d8 --output build --lib "$ANDROID_JAR" $CLASS_FILES
 elif command -v dx &> /dev/null; then
     dx --dex --output=build/classes.dex $OBJ_DIR
 else
