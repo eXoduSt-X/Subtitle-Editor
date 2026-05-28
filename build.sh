@@ -50,10 +50,11 @@ $AAPT2_BIN link --manifest app/src/main/AndroidManifest.xml \
     build/resources.zip
 
 echo "[3/5] Compilando código fuente Java..."
-# CORRECCIÓN: Buscamos TODOS los archivos .java dentro de app/src/main/java para no dejar ninguno fuera
+# Buscamos TODOS los archivos .java dentro de app/src/main/java para no dejar ninguno fuera
 JAVA_FILES=$(find app/src/main/java -name "*.java")
 
-ecj -source 1.8 -target 1.8 -proc:none -d $OBJ_DIR -cp "$ANDROID_JAR" \
+# CORRECCIÓN DE COMPILADOR: Usamos javac en lugar de ecj apuntando a compatibilidad Java 8 (1.8)
+javac -source 1.8 -target 1.8 -d $OBJ_DIR -cp "$ANDROID_JAR" \
     $GEN_DIR/$PACKAGE/R.java \
     $JAVA_FILES
 
@@ -65,7 +66,7 @@ if [ -z "$CLASS_FILES" ]; then
     exit 1
 fi
 
-# CORRECCIÓN: Forzamos a d8 a escupir directamente el archivo final 'classes.dex' en la raíz de build/
+# Forzamos a d8 a escupir directamente el archivo final 'classes.dex' en la raíz de build/
 if [ -n "$D8_BIN" ]; then
     $D8_BIN --output build/classes.zip --lib "$ANDROID_JAR" $CLASS_FILES
     # d8 empaqueta en un zip, extraemos el classes.dex genuino
@@ -77,7 +78,7 @@ else
     exit 1
 fi
 
-# CORRECCIÓN EMBAJADA DE ZIP: Usamos 'zip' estándar de linux para evitar bugs de desalineación con aapt viejo
+# Añadimos classes.dex al APK usando la utilidad zip de Linux
 echo "Añadiendo classes.dex al APK..."
 cd build
 zip -u unaligned.apk classes.dex
@@ -96,9 +97,4 @@ if [ ! -f debug.keystore ]; then
 fi
 
 # Buscamos apksigner oficial en las herramientas del SDK
-APKSIGNER_BIN=$(find $SDK_ROOT/build-tools/ -name "apksigner" | sort -V | tail -n 1 2>/dev/null || echo "apksigner")
-$APKSIGNER_BIN sign --ks debug.keystore --ks-pass pass:android --out build/$APP_NAME-signed.apk build/$APP_NAME.apk
-
-echo "----------------------------------------"
-echo "¡ÉXITO! APK generado en: build/$APP_NAME-signed.apk"
-echo "----------------------------------------"
+APKSIGNER_BIN=$(find $
