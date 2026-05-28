@@ -16,9 +16,9 @@ public class MainActivity extends Activity {
     EditText etLyrics;
     Button btnMark, btnPlayPause, btnSelect, btnSave, btnFwd, btnRew;
     TextView tvTime;
-    SeekBar sbProgress; // Nueva barra de progreso
+    SeekBar sbProgress; 
     String songName = "LetraSincronizada";
-    boolean isUserSeeking = false; // Bandera para evitar conflictos al arrastrar la barra
+    boolean isUserSeeking = false; 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,7 +33,7 @@ public class MainActivity extends Activity {
         btnFwd = (Button) findViewById(R.id.btnFwd);
         btnRew = (Button) findViewById(R.id.btnRew);
         tvTime = (TextView) findViewById(R.id.tvCurrentTime);
-        sbProgress = (SeekBar) findViewById(R.id.sbProgress); // Vinculación de la barra
+        sbProgress = (SeekBar) findViewById(R.id.sbProgress); 
 
         // Forzamos al EditText a aceptar y mantener múltiples líneas en tiempo de ejecución
         etLyrics.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
@@ -96,15 +96,8 @@ public class MainActivity extends Activity {
                 }
             }
 
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-                isUserSeeking = true;
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                isUserSeeking = false;
-            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) { isUserSeeking = true; }
+            @Override public void onStopTrackingTouch(SeekBar seekBar) { isUserSeeking = false; }
         });
     }
 
@@ -116,4 +109,91 @@ public class MainActivity extends Activity {
         String text = etLyrics.getText().toString().replace("\r\n", "\n").replace("\r", "\n");
         if (text.isEmpty()) return;
 
-        int lineStart = text.lastIndexOf
+        int lineStart = text.lastIndexOf("\n", pos - 1) + 1;
+        int lineEnd = text.indexOf("\n", pos);
+        if (lineEnd == -1) lineEnd = text.length();
+
+        String fullLine = text.substring(lineStart, lineEnd);
+        String cleanLine = fullLine.matches("^\\[\\d{2}:\\d{2}\\.\\d{2}\\].*") 
+                           ? fullLine.substring(10).trim() : fullLine.trim();
+        
+        String time = formatTime(mediaPlayer.getCurrentPosition());
+        String newLine = time + " " + cleanLine;
+
+        String updatedText = text.substring(0, lineStart) + newLine + text.substring(lineEnd);
+        etLyrics.setText(updatedText);
+        
+        int nextLinePos = lineStart + newLine.length() + 1;
+        if (nextLinePos <= updatedText.length()) {
+            etLyrics.setSelection(nextLinePos);
+        } else {
+            etLyrics.setSelection(updatedText.length());
+        }
+    }
+
+    private String formatTime(int ms) {
+        int m = (ms / 1000) / 60;
+        int s = (ms / 1000) % 60;
+        int mm = (ms % 1000) / 10;
+        return String.format("[%02d:%02d.%02d]", m, s, mm);
+    }
+
+    private void updateTimer() {
+        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+            int currentPos = mediaPlayer.getCurrentPosition();
+            tvTime.setText(formatTime(currentPos));
+            
+            // Si el usuario no está arrastrando el control, la barra se mueve sola
+            if (!isUserSeeking) {
+                sbProgress.setProgress(currentPos);
+            }
+            
+            tvTime.postDelayed(new Runnable() {
+                @Override public void run() { updateTimer(); }
+            }, 100);
+        }
+    }
+
+    private void saveFile() {
+        try {
+            File f = new File("/sdcard/Download/" + songName + ".lrc");
+            PrintWriter pw = new PrintWriter(new FileWriter(f));
+            pw.print(etLyrics.getText().toString());
+            pw.close();
+            Toast.makeText(this, "Guardado: " + songName + ".lrc", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) { e.printStackTrace(); }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (resultCode == RESULT_OK && data != null) {
+            Uri uri = data.getData();
+            mediaPlayer = MediaPlayer.create(this, uri);
+            
+            // Sincronizamos la duración total del archivo de audio con la barra
+            if (mediaPlayer != null) {
+                sbProgress.setMax(mediaPlayer.getDuration());
+                sbProgress.setProgress(0);
+            }
+            
+            // Intentamos extraer el nombre real del archivo MP3
+            Cursor c = getContentResolver().query(uri, null, null, null, null);
+            if (c != null && c.moveToFirst()) {
+                int i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (i != -1) {
+                    songName = c.getString(i).replaceAll("\\.[^.]*$", "");
+                }
+                c.close();
+            } else if (uri.getPath() != null) {
+                String path = uri.getPath();
+                int cut = path.lastIndexOf('/');
+                if (cut != -1) {
+                    songName = path.substring(cut + 1).replaceAll("\\.[^.]*$", "");
+                }
+            }
+            
+            btnSelect.setText("🎵 " + songName);
+            Toast.makeText(this, "Cargado: " + songName, Toast.LENGTH_SHORT).show();
+        }
+    }
+}
