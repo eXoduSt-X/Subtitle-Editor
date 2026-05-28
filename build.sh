@@ -50,26 +50,33 @@ $AAPT2_BIN link --manifest app/src/main/AndroidManifest.xml \
     build/resources.zip
 
 echo "[3/5] Compilando código fuente Java..."
-# Buscamos TODOS los archivos .java dentro de app/src/main/java para no dejar ninguno fuera
-JAVA_FILES=$(find app/src/main/java -name "*.java")
+# CORRECCIÓN: Búsqueda masiva y flexible de cualquier archivo .java dentro de main
+JAVA_FILES=$(find app/src/main -type f -name "*.java")
 
-# CORRECCIÓN DE COMPILADOR: Usamos javac en lugar de ecj apuntando a compatibilidad Java 8 (1.8)
-javac -source 1.8 -target 1.8 -d $OBJ_DIR -cp "$ANDROID_JAR" \
+if [ -z "$JAVA_FILES" ]; then
+    echo "❌ ERROR CRÍTICO: No se encontró ningún archivo .java en app/src/main"
+    exit 1
+fi
+
+echo "-> Archivos Java detectados:"
+echo "$JAVA_FILES"
+
+# Compilamos vinculando tus archivos encontrados y los recursos mapeados en R.java
+javac -source 1.8 -target 1.8 -d $OBJ_DIR -cp "$ANDROID_JAR:$GEN_DIR" \
     $GEN_DIR/$PACKAGE/R.java \
     $JAVA_FILES
 
 echo "[4/5] Convirtiendo clases a formato Dalvik (.dex)..."
-CLASS_FILES=$(find $OBJ_DIR -name "*.class")
+CLASS_FILES=$(find $OBJ_DIR -type f -name "*.class")
 
 if [ -z "$CLASS_FILES" ]; then
-    echo "Error: No se generaron archivos .class para compilar."
+    echo "❌ Error: No se generaron archivos .class en $OBJ_DIR"
     exit 1
 fi
 
-# Forzamos a d8 a escupir directamente el archivo final 'classes.dex' en la raíz de build/
+# CORRECCIÓN: Pasamos el directorio $OBJ_DIR en vez de archivos sueltos para que d8 conserve la ruta interna com/subtitle/editor
 if [ -n "$D8_BIN" ]; then
-    $D8_BIN --output build/classes.zip --lib "$ANDROID_JAR" $CLASS_FILES
-    # d8 empaqueta en un zip, extraemos el classes.dex genuino
+    $D8_BIN --output build/classes.zip --lib "$ANDROID_JAR" $OBJ_DIR
     unzip -p build/classes.zip classes.dex > build/classes.dex
 elif command -v dx &> /dev/null; then
     dx --dex --output=build/classes.dex $OBJ_DIR
@@ -96,7 +103,7 @@ if [ ! -f debug.keystore ]; then
         -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
 fi
 
-# Buscamos apksigner oficial en las herramientas del SDK (Sintaxis corregida)
+# Buscamos apksigner oficial en las herramientas del SDK con sintaxis limpia
 APKSIGNER_BIN=$(find $SDK_ROOT/build-tools/ -name "apksigner" | sort -V | tail -n 1 2>/dev/null)
 if [ -z "$APKSIGNER_BIN" ]; then
     APKSIGNER_BIN="apksigner"
