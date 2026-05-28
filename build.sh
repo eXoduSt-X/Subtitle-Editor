@@ -10,7 +10,9 @@ OBJ_DIR="build/obj"
 
 # 1. Intentar localizar el SDK de Android
 SDK_ROOT=""
-if [ -d "$PREFIX/share/android-sdk" ]; then
+if [ -d "$ANDROID_HOME" ]; then
+    SDK_ROOT="$ANDROID_HOME"
+elif [ -d "$PREFIX/share/android-sdk" ]; then
     SDK_ROOT="$PREFIX/share/android-sdk"
 elif [ -d "$HOME/android-sdk" ]; then
     SDK_ROOT="$HOME/android-sdk"
@@ -48,32 +50,43 @@ $AAPT2_BIN link --manifest app/src/main/AndroidManifest.xml \
     build/resources.zip
 
 echo "[3/5] Compilando código fuente Java..."
+# CORRECCIÓN: Buscamos TODOS los archivos .java dentro de app/src/main/java para no dejar ninguno fuera
+JAVA_FILES=$(find app/src/main/java -name "*.java")
+
 ecj -source 1.8 -target 1.8 -proc:none -d $OBJ_DIR -cp "$ANDROID_JAR" \
     $GEN_DIR/$PACKAGE/R.java \
-    app/src/main/java/$PACKAGE/MainActivity.java
+    $JAVA_FILES
 
 echo "[4/5] Convirtiendo clases a formato Dalvik (.dex)..."
 CLASS_FILES=$(find $OBJ_DIR -name "*.class")
 
-# CORRECCIÓN AQUÍ: Se cambió '--output build/classes.dex' por '--output build'
-if [ -n "$D8_BIN" ]; then
-    $D8_BIN --output build --lib "$ANDROID_JAR" $CLASS_FILES
-elif command -v d8 &> /dev/null; then
-    d8 --output build --lib "$ANDROID_JAR" $CLASS_FILES
-elif command -v dx &> /dev/null; then
-    dx --dex --output=build/classes.dex $OBJ_DIR
-else
-    echo "Error: No se encontró d8 ni dx en las herramientas del SDK."
+if [ -z "$CLASS_FILES" ]; then
+    echo "Error: No se generaron archivos .class para compilar."
     exit 1
 fi
 
-# Añadir el archivo dex dentro del APK generado
+# CORRECCIÓN: Forzamos a d8 a escupir directamente el archivo final 'classes.dex' en la raíz de build/
+if [ -n "$D8_BIN" ]; then
+    $D8_BIN --output build/classes.zip --lib "$ANDROID_JAR" $CLASS_FILES
+    # d8 empaqueta en un zip, extraemos el classes.dex genuino
+    unzip -p build/classes.zip classes.dex > build/classes.dex
+elif command -v dx &> /dev/null; then
+    dx --dex --output=build/classes.dex $OBJ_DIR
+else
+    echo "Error: No se encontró d8 ni dx válidos."
+    exit 1
+fi
+
+# CORRECCIÓN EMBAJADA DE ZIP: Usamos 'zip' estándar de linux para evitar bugs de desalineación con aapt viejo
+echo "Añadiendo classes.dex al APK..."
 cd build
-aapt add unaligned.apk classes.dex > /dev/null
+zip -u unaligned.apk classes.dex
 cd ..
 
 echo "[5/5] Alineando y firmando el APK..."
-zipalign -f 4 build/unaligned.apk build/$APP_NAME.apk
+# Buscamos zipalign en las herramientas del SDK si no está global
+ZIPALIGN_BIN=$(find $SDK_ROOT/build-tools/ -name "zipalign" | sort -V | tail -n 1 2>/dev/null || echo "zipalign")
+$ZIPALIGN_BIN -f 4 build/unaligned.apk build/$APP_NAME.apk
 
 # Crear una clave de prueba si no existe para firmar
 if [ ! -f debug.keystore ]; then
@@ -82,7 +95,9 @@ if [ ! -f debug.keystore ]; then
         -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
 fi
 
-apksigner sign --ks debug.keystore --ks-pass pass:android --out build/$APP_NAME-signed.apk build/$APP_NAME.apk
+# Buscamos apksigner oficial en las herramientas del SDK
+APKSIGNER_BIN=$(find $SDK_ROOT/build-tools/ -name "apksigner" | sort -V | tail -n 1 2>/dev/null || echo "apksigner")
+$APKSIGNER_BIN sign --ks debug.keystore --ks-pass pass:android --out build/$APP_NAME-signed.apk build/$APP_NAME.apk
 
 echo "----------------------------------------"
 echo "¡ÉXITO! APK generado en: build/$APP_NAME-signed.apk"
