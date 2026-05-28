@@ -8,19 +8,38 @@ BUILD_DIR="build"
 GEN_DIR="build/gen"
 OBJ_DIR="build/obj"
 
-# Intentar localizar el SDK mínimo en Termux o entornos Linux estándar
-ANDROID_JAR=$(find $PREFIX/share/android-sdk/platforms/ -name "android.jar" | sort -V | tail -n 1 2>/dev/null || echo "")
-if [ -z "$ANDROID_JAR" ]; then
-    ANDROID_JAR="$HOME/android-sdk/platforms/android-26/android.jar"
+# 1. Intentar localizar el SDK de Android
+SDK_ROOT=""
+if [ -d "$PREFIX/share/android-sdk" ]; then
+    SDK_ROOT="$PREFIX/share/android-sdk"
+elif [ -d "$HOME/android-sdk" ]; then
+    SDK_ROOT="$HOME/android-sdk"
+elif [ -d "/usr/local/lib/android/sdk" ]; then
+    SDK_ROOT="/usr/local/lib/android/sdk"
 fi
+
+# Localizar el android.jar más reciente
+ANDROID_JAR=$(find $SDK_ROOT/platforms/ -name "android.jar" | sort -V | tail -n 1 2>/dev/null || echo "")
+if [ -z "$ANDROID_JAR" ]; then
+    echo "Error: No se encontró android.jar"
+    exit 1
+fi
+
+# 2. SOLUCIÓN AL ERROR: Localizar el AAPT2 correcto dentro de build-tools
+# Buscamos el binario de aapt2 más actualizado del SDK, si no existe, usamos el global
+AAPT2_BIN=$(find $SDK_ROOT/build-tools/ -name "aapt2" | sort -V | tail -n 1 2>/dev/null || echo "aapt2")
+
+echo "-> Usando SDK: $ANDROID_JAR"
+echo "-> Usando AAPT2: $AAPT2_BIN"
 
 echo "[1/5] Limpiando entorno..."
 rm -rf $BUILD_DIR
 mkdir -p $GEN_DIR $OBJ_DIR
 
 echo "[2/5] Procesando recursos de la interfaz (AAPT2)..."
-aapt2 compile --dir app/src/main/res -o build/resources.zip
-aapt2 link --manifest app/src/main/AndroidManifest.xml \
+# Usamos el AAPT2 localizado del SDK
+$AAPT2_BIN compile --dir app/src/main/res -o build/resources.zip
+$AAPT2_BIN link --manifest app/src/main/AndroidManifest.xml \
     -I "$ANDROID_JAR" \
     --java $GEN_DIR \
     -o build/unaligned.apk \
@@ -40,6 +59,7 @@ fi
 
 # Añadir el archivo dex dentro del APK generado
 cd build
+# También es recomendable usar el aapt del SDK si da problemas, pero 'add' suele ser más noble
 aapt add unaligned.apk classes.dex > /dev/null
 cd ..
 
