@@ -32,25 +32,26 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:weightSum="3"
+            android:weightSum="4"
+            android:gravity="center_vertical"
             android:layout_marginBottom="8dp">
 
             <Button
                 android:id="@+id/btnSelectAudio"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1.1"
-                android:text="🎵 MULTIMEDIA"
-                android:textSize="11sp"
+                android:layout_weight="1.0"
+                android:text="🎵 MULTI"
+                android:textSize="10sp"
                 android:layout_marginRight="2dp" />
 
             <Button
                 android:id="@+id/btnLoadLrc"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1.1"
+                android:layout_weight="1.0"
                 android:text="📂 LRC"
-                android:textSize="11sp"
+                android:textSize="10sp"
                 android:layout_marginLeft="2dp"
                 android:layout_marginRight="2dp" />
 
@@ -58,10 +59,23 @@
                 android:id="@+id/btnSave"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="0.8"
+                android:layout_weight="1.0"
                 android:text="GUARDAR"
-                android:textSize="11sp"
-                android:layout_marginLeft="2dp" />
+                android:textSize="10sp"
+                android:layout_marginLeft="2dp"
+                android:layout_marginRight="2dp" />
+
+            <Switch
+                android:id="@+id/swExportSrt"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1.0"
+                android:text="SRT"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:layout_marginLeft="2dp"
+                android:gravity="center" />
         </LinearLayout>
 
         <LinearLayout
@@ -182,13 +196,3 @@
         android:id="@+id/etLyrics"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:gravity="top|left"
-        android:hint="Pega la letra aquí o carga un archivo .lrc..."
-        android:inputType="textMultiLine"
-        android:background="#1A1A1A"
-        android:textColor="#FFFFFF"
-        android:padding="10dp"
-        android:scrollbars="vertical" />
-
-</LinearLayout>
