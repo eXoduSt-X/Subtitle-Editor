@@ -9,6 +9,7 @@ import android.provider.OpenableColumns;
 import android.view.View;
 import android.widget.*;
 import java.io.*;
+import java.util.ArrayList;
 
 public class MainActivity extends Activity {
     VideoView videoView;
@@ -18,6 +19,7 @@ public class MainActivity extends Activity {
     Button btnUp, btnDown, btnLeft, btnRight, btnLoadLrc;
     TextView tvTime;
     SeekBar sbProgress; 
+    Switch swExportSrt; // Nuevo Switch para alternar entre LRC y SRT
     String songName = "LetraSincronizada";
     boolean isUserSeeking = false; 
     boolean isMediaLoaded = false;
@@ -44,6 +46,9 @@ public class MainActivity extends Activity {
         btnLeft = (Button) findViewById(R.id.btnLeft);
         btnRight = (Button) findViewById(R.id.btnRight);
         btnLoadLrc = (Button) findViewById(R.id.btnLoadLrc);
+        
+        // Inicializamos el Switch (Asegúrate de agregarlo a tu main.xml con este ID si quieres controlarlo visualmente, o puedes setearlo por código)
+        swExportSrt = (Switch) findViewById(R.id.swExportSrt);
 
         videoContainer.setVisibility(View.GONE);
 
@@ -62,10 +67,8 @@ public class MainActivity extends Activity {
 
         btnLoadLrc.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                // CAMBIO ESTRATÉGICO: Usamos ACTION_OPEN_DOCUMENT para saltar el filtro estricto de MIME types
                 Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
-                // Le indicamos que acepte cualquier flujo de datos plano
                 i.setType("*/*"); 
                 startActivityForResult(i, 2);
             }
@@ -140,7 +143,7 @@ public class MainActivity extends Activity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if (fromUser && isMediaLoaded) {
                     videoView.seekTo(progress);
-                    tvTime.setText(formatTime(progress));
+                    tvTime.setText(formatTimeLrc(progress));
                 }
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) { isUserSeeking = true; }
@@ -192,11 +195,11 @@ public class MainActivity extends Activity {
         String cleanLine = fullLine.matches("^\\[\\d{2}:\\d{2}\\.\\d{2}\\].*") 
                            ? fullLine.substring(10).trim() : fullLine.trim();
         
-        String time = formatTime(videoView.getCurrentPosition());
+        // Mantenemos las marcas internas en formato LRC en el EditText por comodidad de visualización de una sola línea
+        String time = formatTimeLrc(videoView.getCurrentPosition());
         String newLine = time + " " + cleanLine;
 
         String updatedText = text.substring(0, lineStart) + newLine + text.substring(lineEnd);
-        
         etLyrics.setText(updatedText);
         
         int nextLinePos = lineStart + newLine.length() + 1;
@@ -207,17 +210,42 @@ public class MainActivity extends Activity {
         }
     }
 
-    private String formatTime(int ms) {
+    // Formato nativo LRC: [mm:ss.xx]
+    private String formatTimeLrc(int ms) {
         int m = (ms / 1000) / 60;
         int s = (ms / 1000) % 60;
         int mm = (ms % 1000) / 10;
         return String.format("[%02d:%02d.%02d]", m, s, mm);
     }
 
+    // Formato nativo SRT: hh:mm:ss,xxx
+    private String formatTimeSrt(int ms) {
+        int h = (ms / 1000) / 3600;
+        int m = ((ms / 1000) % 3600) / 60;
+        int s = (ms / 1000) % 60;
+        int msec = ms % 1000;
+        return String.format("%02d:%02d:%02d,%03d", h, m, s, msec);
+    }
+
+    // Convierte un timestamp de LRC [mm:ss.xx] a milisegundos enteros
+    private int lrcTimeToMs(String timestamp) {
+        try {
+            String clean = timestamp.replace("[", "").replace("]", "");
+            String[] parts = clean.split(":");
+            int min = Integer.parseInt(parts[0]);
+            String[] secParts = parts[1].split("\\.");
+            int sec = Integer.parseInt(secParts[1]);
+            int msPart = Integer.parseInt(secParts[1]) * 10; // Centésimas a milisegundos
+            return (min * 60 * 1000) + (sec * 1000) + msPart;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     private void updateTimer() {
         if (isMediaLoaded && videoView.isPlaying()) {
             int currentPos = videoView.getCurrentPosition();
-            tvTime.setText(formatTime(currentPos));
+            tvTime.setText(formatTimeLrc(currentPos));
             if (!isUserSeeking) {
                 sbProgress.setProgress(currentPos);
             }
@@ -228,13 +256,59 @@ public class MainActivity extends Activity {
     }
 
     private void saveFile() {
+        // Verificamos el estado del Switch para decidir el formato de guardado
+        boolean saveAsSrt = (swExportSrt != null && swExportSrt.isChecked());
+        
         try {
-            File f = new File("/sdcard/Download/" + songName + ".lrc");
-            PrintWriter pw = new PrintWriter(new FileWriter(f));
-            pw.print(etLyrics.getText().toString());
-            pw.close();
-            Toast.makeText(this, "Guardado: " + songName + ".lrc", Toast.LENGTH_SHORT).show();
-        } catch (Exception e) { e.printStackTrace(); }
+            if (saveAsSrt) {
+                // EXPORTACIÓN A FORMATO .SRT
+                File f = new File("/sdcard/Download/" + songName + ".srt");
+                PrintWriter pw = new PrintWriter(new FileWriter(f));
+                
+                String[] lines = etLyrics.getText().toString().split("\n");
+                int index = 1;
+
+                for (int i = 0; i < lines.length; i++) {
+                    String line = lines[i].trim();
+                    if (line.matches("^\\[\\d{2}:\\d{2}\\.\\d{2}\\].*")) {
+                        String timestampLrc = line.substring(0, 10);
+                        String text = line.substring(10).trim();
+                        
+                        int startMs = lrcTimeToMs(timestampLrc);
+                        int endMs;
+                        
+                        // Si hay una línea siguiente con tiempo, el subtítulo actual termina donde empieza el próximo
+                        if (i + 1 < lines.length && lines[i+1].trim().matches("^\\[\\d{2}:\\d{2}\\.\\d{2}\\].*")) {
+                            endMs = lrcTimeToMs(lines[i+1].trim().substring(0, 10));
+                        } else {
+                            // Si es la última frase, se mantiene visible por 4 segundos o hasta el final del video
+                            endMs = startMs + 4000;
+                            if (isMediaLoaded && endMs > videoView.getDuration()) {
+                                endMs = videoView.getDuration();
+                            }
+                        }
+                        
+                        pw.println(index);
+                        pw.println(formatTimeSrt(startMs) + " --> " + formatTimeSrt(endMs));
+                        pw.println(text);
+                        pw.println(); // Línea en blanco obligatoria en SRT
+                        index++;
+                    }
+                }
+                pw.close();
+                Toast.makeText(this, "Guardado SRT: " + songName + ".srt", Toast.LENGTH_SHORT).show();
+            } else {
+                // GUARDADO TRADICIONAL EN FORMATO .LRC
+                File f = new File("/sdcard/Download/" + songName + ".lrc");
+                PrintWriter pw = new PrintWriter(new FileWriter(f));
+                pw.print(etLyrics.getText().toString());
+                pw.close();
+                Toast.makeText(this, "Guardado LRC: " + songName + ".lrc", Toast.LENGTH_SHORT).show();
+            }
+        } catch (Exception e) { 
+            e.printStackTrace(); 
+            Toast.makeText(this, "Error al guardar el archivo", Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override
@@ -283,7 +357,6 @@ public class MainActivity extends Activity {
                     
                     String lrcContent = sb.toString();
                     
-                    // Limpieza del BOM "ÿþ" inicial de codificaciones Windows en los .lrc
                     if (lrcContent.startsWith("ÿþ") || lrcContent.startsWith("\uFEFF") || lrcContent.startsWith("\uFFFE")) {
                         lrcContent = lrcContent.substring(2);
                     } else if (lrcContent.length() > 0 && (lrcContent.charAt(0) == 'ÿ' || lrcContent.charAt(0) == 'þ')) {
