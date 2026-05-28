@@ -1,0 +1,48 @@
+name: Build Subtitle Editor APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch: # Permite compilar manualmente desde la pestaña Actions
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout del código
+      uses: actions/checkout@v4
+
+    - name: Configurar Java JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Instalar Android SDK y Herramientas de Compilación
+      run: |
+        sudo apt-get update
+        # Instalar compilador ECJ para Java y herramientas de Android necesarias
+        sudo apt-get install -y ecj android-sdk-build-tools
+        
+        # Definir variables de entorno para que el script localice las herramientas
+        # Usamos las herramientas nativas disponibles en los servidores de GitHub
+        SDK_DIR="/usr/lib/android-sdk"
+        # Localizamos el android.jar de la plataforma disponible
+        ANDROID_JAR=$(find $ANDROID_HOME/platforms/ -name "android.jar" | sort -V | tail -n 1)
+        
+        # Modificación temporal de rutas para el entorno de GitHub en lugar de Termux
+        sed -i "s|ANDROID_JAR=.*|ANDROID_JAR=\"$ANDROID_JAR\"|g" build.sh
+
+    - name: Dar permisos de ejecución y Compilar APK
+      run: |
+        chmod +x build.sh
+        ./build.sh
+
+    - name: Subir APK generado como Artefacto
+      uses: actions/upload-artifact@v4
+      with:
+        name: SubtitleEditor-APK
+        path: build/SubtitleEditor-signed.apk
