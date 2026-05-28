@@ -48,13 +48,13 @@ public class MainActivity extends Activity {
         // Ocultamos el contenedor de video al iniciar hasta que se cargue un MP4
         videoContainer.setVisibility(View.GONE);
 
-        etLyrics.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        etLyrics.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         etLyrics.setSingleLine(false);
 
         btnSelect.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 Intent i = new Intent(Intent.ACTION_GET_CONTENT);
-                i.setType("*/*"); // Permite seleccionar tanto audio como video de forma nativa
+                i.setType("*/*"); 
                 String[] mimeTypes = {"audio/*", "video/*"};
                 i.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
                 startActivityForResult(i, 1);
@@ -73,9 +73,12 @@ public class MainActivity extends Activity {
             @Override public void onClick(View v) {
                 if (!isMediaLoaded) return;
                 if (videoView.isPlaying()) {
-                    videoView.pause(); btnPlayPause.setText("Play");
+                    videoView.pause(); 
+                    btnPlayPause.setText("Play");
                 } else {
-                    videoView.start(); btnPlayPause.setText("Pause"); updateTimer();
+                    videoView.start(); 
+                    btnPlayPause.setText("Pause"); 
+                    updateTimer();
                 }
             }
         });
@@ -176,6 +179,7 @@ public class MainActivity extends Activity {
         if (!isMediaLoaded) return;
         int pos = etLyrics.getSelectionStart();
         
+        // Normalización estricta de saltos de línea de cualquier origen de copiado
         String text = etLyrics.getText().toString().replace("\r\n", "\n").replace("\r", "\n");
         if (text.isEmpty()) return;
 
@@ -191,6 +195,8 @@ public class MainActivity extends Activity {
         String newLine = time + " " + cleanLine;
 
         String updatedText = text.substring(0, lineStart) + newLine + text.substring(lineEnd);
+        
+        // Seteamos el texto manteniendo la estructura limpia de saltos de línea nativos
         etLyrics.setText(updatedText);
         
         int nextLinePos = lineStart + newLine.length() + 1;
@@ -233,33 +239,39 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
         if (resultCode == RESULT_OK && data != null) {
-            Uri uri = data.getData();
+            final Uri uri = data.getData();
             
             if (requestCode == 1) {
                 extractSongName(uri);
                 
-                // Inicializamos el VideoView con el URI seleccionado
+                // CAMBIO CLAVE: Cambiamos el texto del botón multimedia ANTES de procesar el renderizado del layout
+                btnSelect.setText("🎬 " + songName);
+                
+                // Forzamos visibilidad previa y reseteo del contenedor gráfico para evitar que el video se quede en negro
+                videoContainer.setVisibility(View.VISIBLE);
+                videoContainer.requestLayout();
+                
                 videoView.setVideoURI(uri);
                 isMediaLoaded = true;
                 
-                // Escuchamos el evento de preparado para setear los límites de la barra de progreso
                 videoView.setOnPreparedListener(new android.media.MediaPlayer.OnPreparedListener() {
                     @Override
                     public void onPrepared(android.media.MediaPlayer mp) {
                         sbProgress.setMax(videoView.getDuration());
                         sbProgress.setProgress(0);
                         
-                        // Si el archivo tiene video real, mostramos el contenedor, sino lo ocultamos (ej: MP3)
-                        if (mp.getVideoWidth() > 0 && mp.getVideoHeight() > 0) {
-                            videoContainer.setVisibility(View.VISIBLE);
-                        } else {
+                        // Si no tiene pistas de video (es un MP3 o M4A), volvemos a ocultar el contenedor de pantalla
+                        if (mp.getVideoWidth() == 0 || mp.getVideoHeight() == 0) {
                             videoContainer.setVisibility(View.GONE);
+                        } else {
+                            // Si es un video real, forzamos un seek inicial estricto para renderizar el primer frame fijo
+                            videoView.seekTo(1);
                         }
                     }
                 });
                 
-                btnSelect.setText("🎬 " + songName);
                 Toast.makeText(this, "Cargado: " + songName, Toast.LENGTH_SHORT).show();
             } 
             else if (requestCode == 2) {
@@ -274,7 +286,10 @@ public class MainActivity extends Activity {
                     br.close();
                     is.close();
                     
-                    etLyrics.setText(sb.toString().replace("\r\n", "\n").replace("\r", "\n"));
+                    // Aseguramos formateo nativo en el seteo del archivo cargado
+                    String lrcContent = sb.toString().replace("\r\n", "\n").replace("\r", "\n");
+                    etLyrics.setText(lrcContent);
+                    
                     extractSongName(uri);
                     btnLoadLrc.setText("📂 " + songName);
                     Toast.makeText(this, "LRC Cargado: " + songName, Toast.LENGTH_SHORT).show();
