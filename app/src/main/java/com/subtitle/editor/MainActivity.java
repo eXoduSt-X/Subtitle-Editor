@@ -3,7 +3,6 @@ package com.subtitle.editor;
 import android.app.Activity;
 import android.content.Intent;
 import android.database.Cursor;
-import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.OpenableColumns;
@@ -12,20 +11,24 @@ import android.widget.*;
 import java.io.*;
 
 public class MainActivity extends Activity {
-    MediaPlayer mediaPlayer;
+    VideoView videoView;
+    View videoContainer;
     EditText etLyrics;
     Button btnMark, btnPlayPause, btnSelect, btnSave, btnFwd, btnRew;
-    Button btnUp, btnDown, btnLeft, btnRight, btnLoadLrc; // Agregado btnLoadLrc
+    Button btnUp, btnDown, btnLeft, btnRight, btnLoadLrc;
     TextView tvTime;
     SeekBar sbProgress; 
     String songName = "LetraSincronizada";
     boolean isUserSeeking = false; 
+    boolean isMediaLoaded = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
 
+        videoView = (VideoView) findViewById(R.id.videoView);
+        videoContainer = findViewById(R.id.videoContainer);
         etLyrics = (EditText) findViewById(R.id.etLyrics);
         btnMark = (Button) findViewById(R.id.btnMark);
         btnPlayPause = (Button) findViewById(R.id.btnPlayPause);
@@ -40,55 +43,59 @@ public class MainActivity extends Activity {
         btnDown = (Button) findViewById(R.id.btnDown);
         btnLeft = (Button) findViewById(R.id.btnLeft);
         btnRight = (Button) findViewById(R.id.btnRight);
-        btnLoadLrc = (Button) findViewById(R.id.btnLoadLrc); // Vinculación del nuevo botón
+        btnLoadLrc = (Button) findViewById(R.id.btnLoadLrc);
 
-        // Forzamos al EditText a aceptar y mantener múltiples líneas en tiempo de ejecución
+        // Ocultamos el contenedor de video al iniciar hasta que se cargue un MP4
+        videoContainer.setVisibility(View.GONE);
+
         etLyrics.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         etLyrics.setSingleLine(false);
 
         btnSelect.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 Intent i = new Intent(Intent.ACTION_GET_CONTENT);
-                i.setType("audio/*");
-                startActivityForResult(i, 1); // RequestCode 1 para Audio
+                i.setType("*/*"); // Permite seleccionar tanto audio como video de forma nativa
+                String[] mimeTypes = {"audio/*", "video/*"};
+                i.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+                startActivityForResult(i, 1);
             }
         });
 
         btnLoadLrc.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 Intent i = new Intent(Intent.ACTION_GET_CONTENT);
-                i.setType("text/*"); // Filtra archivos de texto y subtítulos (.lrc, .txt)
-                startActivityForResult(i, 2); // RequestCode 2 para LRC
+                i.setType("text/*");
+                startActivityForResult(i, 2);
             }
         });
 
         btnPlayPause.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                if (mediaPlayer == null) return;
-                if (mediaPlayer.isPlaying()) {
-                    mediaPlayer.pause(); btnPlayPause.setText("Play");
+                if (!isMediaLoaded) return;
+                if (videoView.isPlaying()) {
+                    videoView.pause(); btnPlayPause.setText("Play");
                 } else {
-                    mediaPlayer.start(); btnPlayPause.setText("Pause"); updateTimer();
+                    videoView.start(); btnPlayPause.setText("Pause"); updateTimer();
                 }
             }
         });
 
         btnRew.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                if (mediaPlayer != null) {
-                    int newPos = mediaPlayer.getCurrentPosition() - 5000;
-                    mediaPlayer.seekTo(Math.max(newPos, 0));
-                    if (!isUserSeeking) sbProgress.setProgress(mediaPlayer.getCurrentPosition());
+                if (isMediaLoaded) {
+                    int newPos = videoView.getCurrentPosition() - 5000;
+                    videoView.seekTo(Math.max(newPos, 0));
+                    if (!isUserSeeking) sbProgress.setProgress(videoView.getCurrentPosition());
                 }
             }
         });
 
         btnFwd.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                if (mediaPlayer != null) {
-                    int newPos = mediaPlayer.getCurrentPosition() + 5000;
-                    mediaPlayer.seekTo(Math.min(newPos, mediaPlayer.getDuration()));
-                    if (!isUserSeeking) sbProgress.setProgress(mediaPlayer.getCurrentPosition());
+                if (isMediaLoaded) {
+                    int newPos = videoView.getCurrentPosition() + 5000;
+                    videoView.seekTo(Math.min(newPos, videoView.getDuration()));
+                    if (!isUserSeeking) sbProgress.setProgress(videoView.getCurrentPosition());
                 }
             }
         });
@@ -126,8 +133,8 @@ public class MainActivity extends Activity {
         sbProgress.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (fromUser && mediaPlayer != null) {
-                    mediaPlayer.seekTo(progress);
+                if (fromUser && isMediaLoaded) {
+                    videoView.seekTo(progress);
                     tvTime.setText(formatTime(progress));
                 }
             }
@@ -166,7 +173,7 @@ public class MainActivity extends Activity {
     }
 
     private void handleMarking() {
-        if (mediaPlayer == null) return;
+        if (!isMediaLoaded) return;
         int pos = etLyrics.getSelectionStart();
         
         String text = etLyrics.getText().toString().replace("\r\n", "\n").replace("\r", "\n");
@@ -180,7 +187,7 @@ public class MainActivity extends Activity {
         String cleanLine = fullLine.matches("^\\[\\d{2}:\\d{2}\\.\\d{2}\\].*") 
                            ? fullLine.substring(10).trim() : fullLine.trim();
         
-        String time = formatTime(mediaPlayer.getCurrentPosition());
+        String time = formatTime(videoView.getCurrentPosition());
         String newLine = time + " " + cleanLine;
 
         String updatedText = text.substring(0, lineStart) + newLine + text.substring(lineEnd);
@@ -202,8 +209,8 @@ public class MainActivity extends Activity {
     }
 
     private void updateTimer() {
-        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-            int currentPos = mediaPlayer.getCurrentPosition();
+        if (isMediaLoaded && videoView.isPlaying()) {
+            int currentPos = videoView.getCurrentPosition();
             tvTime.setText(formatTime(currentPos));
             if (!isUserSeeking) {
                 sbProgress.setProgress(currentPos);
@@ -229,19 +236,32 @@ public class MainActivity extends Activity {
         if (resultCode == RESULT_OK && data != null) {
             Uri uri = data.getData();
             
-            // CASO 1: Procesar archivo de audio MP3
             if (requestCode == 1) {
-                mediaPlayer = MediaPlayer.create(this, uri);
-                if (mediaPlayer != null) {
-                    sbProgress.setMax(mediaPlayer.getDuration());
-                    sbProgress.setProgress(0);
-                }
                 extractSongName(uri);
-                btnSelect.setText("🎵 " + songName);
-                Toast.makeText(this, "Audio: " + songName, Toast.LENGTH_SHORT).show();
+                
+                // Inicializamos el VideoView con el URI seleccionado
+                videoView.setVideoURI(uri);
+                isMediaLoaded = true;
+                
+                // Escuchamos el evento de preparado para setear los límites de la barra de progreso
+                videoView.setOnPreparedListener(new android.media.MediaPlayer.OnPreparedListener() {
+                    @Override
+                    public void onPrepared(android.media.MediaPlayer mp) {
+                        sbProgress.setMax(videoView.getDuration());
+                        sbProgress.setProgress(0);
+                        
+                        // Si el archivo tiene video real, mostramos el contenedor, sino lo ocultamos (ej: MP3)
+                        if (mp.getVideoWidth() > 0 && mp.getVideoHeight() > 0) {
+                            videoContainer.setVisibility(View.VISIBLE);
+                        } else {
+                            videoContainer.setVisibility(View.GONE);
+                        }
+                    }
+                });
+                
+                btnSelect.setText("🎬 " + songName);
+                Toast.makeText(this, "Cargado: " + songName, Toast.LENGTH_SHORT).show();
             } 
-            
-            // CASO 2: Procesar y cargar archivo .lrc externo
             else if (requestCode == 2) {
                 try {
                     InputStream is = getContentResolver().openInputStream(uri);
@@ -254,21 +274,18 @@ public class MainActivity extends Activity {
                     br.close();
                     is.close();
                     
-                    // Inyectamos el texto limpio respetando sus saltos originales
                     etLyrics.setText(sb.toString().replace("\r\n", "\n").replace("\r", "\n"));
-                    
                     extractSongName(uri);
                     btnLoadLrc.setText("📂 " + songName);
                     Toast.makeText(this, "LRC Cargado: " + songName, Toast.LENGTH_SHORT).show();
                 } catch (Exception e) {
                     e.printStackTrace();
-                    Toast.makeText(this, "Error al leer el archivo LRC", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "Error al leer LRC", Toast.LENGTH_SHORT).show();
                 }
             }
         }
     }
 
-    // Método auxiliar unificado para renombrar songName dinámicamente
     private void extractSongName(Uri uri) {
         Cursor c = getContentResolver().query(uri, null, null, null, null);
         if (c != null && c.moveToFirst()) {
