@@ -1,0 +1,59 @@
+mkdir -p app/src/main/res/layout
+cat << 'EOF' > app/src/main/res/layout/main.xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="10dp"
+    android:background="#121212">
+
+    <Button android:id="@+id/btnSelectAudio" 
+        android:layout_width="match_parent" 
+        android:layout_height="wrap_content" 
+        android:text="1. CARGAR MÚSICA" 
+        android:textColor="#FFFFFF" />
+    
+    <EditText android:id="@+id/etLyrics" 
+        android:layout_width="match_parent" 
+        android:layout_height="0dp" 
+        android:layout_weight="1" 
+        android:hint="Letra aquí..." 
+        android:textColorHint="#555555"
+        android:gravity="top" 
+        android:textSize="16sp"
+        android:textColor="#FFFFFF"
+        android:background="#1E1E1E"
+        android:padding="10dp" />
+
+    <TextView android:id="@+id/tvCurrentTime" 
+        android:layout_width="match_parent" 
+        android:layout_height="wrap_content" 
+        android:text="00:00.00" 
+        android:gravity="center" 
+        android:textSize="34sp" 
+        android:textStyle="bold"
+        android:textColor="#FF9800"
+        android:padding="10dp" />
+
+    <LinearLayout android:layout_width="match_parent" 
+        android:layout_height="wrap_content" 
+        android:orientation="horizontal">
+        <Button android:id="@+id/btnRew" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="-5s" />
+        <Button android:id="@+id/btnPlayPause" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Play" />
+        <Button android:id="@+id/btnFwd" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="+5s" />
+    </LinearLayout>
+
+    <Button android:id="@+id/btnMark" 
+        android:layout_width="match_parent" 
+        android:layout_height="80dp" 
+        android:text="MARCAR / SIGUIENTE" 
+        android:textSize="18sp" />
+    
+    <Button android:id="@+id/btnSave" 
+        android:layout_width="match_parent" 
+        android:layout_height="wrap_content" 
+        android:text="GUARDAR LRC" />
+</LinearLayout>
+EOF
+  
