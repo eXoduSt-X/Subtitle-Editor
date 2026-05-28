@@ -1,7 +1,7 @@
 name: Build Subtitle Editor APK
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Permite compilar manualmente desde la pestaña Actions de GitHub
 
 jobs:
   build:
@@ -17,18 +17,23 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    - name: Instalar utilidades de empaquetado (Zip)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y zip
+
     - name: Configurar Herramientas del SDK Oficial
       run: |
-        # Localizamos el android.jar oficial preinstalado
+        # Localizamos el android.jar oficial preinstalado en la máquina de GitHub
         ANDROID_JAR=$(find $ANDROID_HOME/platforms/ -name "android.jar" | sort -V | tail -n 1)
         echo "Usando Android.jar en: $ANDROID_JAR"
         
-        # Agregamos los build-tools oficiales (como aapt2, d8/dx) al PATH para que build.sh los encuentre
+        # Agregamos los build-tools oficiales (aapt2, d8) al PATH global de la ejecución
         BUILD_TOOLS_DIR=$(find $ANDROID_HOME/build-tools/ -maxdepth 1 -mindepth 1 | sort -V | tail -n 1)
         echo "Usando Build Tools en: $BUILD_TOOLS_DIR"
         echo "$BUILD_TOOLS_DIR" >> $GITHUB_PATH
         
-        # Ajustamos tu script para que apunte al jar correcto
+        # Inyectamos la ruta del android.jar dinámicamente en el build.sh
         sed -i "s|ANDROID_JAR=.*|ANDROID_JAR=\"$ANDROID_JAR\"|g" build.sh
 
     - name: Dar permisos de ejecución y Compilar APK
