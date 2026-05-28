@@ -50,7 +50,7 @@ $AAPT2_BIN link --manifest app/src/main/AndroidManifest.xml \
     build/resources.zip
 
 echo "[3/5] Compilando código fuente Java..."
-# CORRECCIÓN: Búsqueda masiva y flexible de cualquier archivo .java dentro de main
+# Búsqueda masiva y flexible de cualquier archivo .java dentro de main
 JAVA_FILES=$(find app/src/main -type f -name "*.java")
 
 if [ -z "$JAVA_FILES" ]; then
@@ -67,6 +67,7 @@ javac -source 1.8 -target 1.8 -d $OBJ_DIR -cp "$ANDROID_JAR:$GEN_DIR" \
     $JAVA_FILES
 
 echo "[4/5] Convirtiendo clases a formato Dalvik (.dex)..."
+# Buscamos de forma estricta SOLO los archivos que terminen en .class para evitar errores en d8
 CLASS_FILES=$(find $OBJ_DIR -type f -name "*.class")
 
 if [ -z "$CLASS_FILES" ]; then
@@ -74,9 +75,9 @@ if [ -z "$CLASS_FILES" ]; then
     exit 1
 fi
 
-# CORRECCIÓN: Pasamos el directorio $OBJ_DIR en vez de archivos sueltos para que d8 conserve la ruta interna com/subtitle/editor
+# Ejecutamos d8 pasándole explícitamente solo la lista limpia de archivos .class
 if [ -n "$D8_BIN" ]; then
-    $D8_BIN --output build/classes.zip --lib "$ANDROID_JAR" $OBJ_DIR
+    $D8_BIN --output build/classes.zip --lib "$ANDROID_JAR" $CLASS_FILES
     unzip -p build/classes.zip classes.dex > build/classes.dex
 elif command -v dx &> /dev/null; then
     dx --dex --output=build/classes.dex $OBJ_DIR
