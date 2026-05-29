@@ -4,9 +4,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:padding="8dp"
-    android:background="#121212">
-
-    <FrameLayout
+    android:background="#000000"> <FrameLayout
         android:id="@+id/videoContainer"
         android:layout_width="match_parent"
         android:layout_height="160dp"
@@ -38,8 +36,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="#1E1E1E"
-        android:padding="8dp"
+        android:background="#000000" android:padding="8dp"
         android:layout_marginBottom="8dp">
 
         <LinearLayout
@@ -236,8 +233,7 @@
         android:gravity="top|left"
         android:hint="Pega la letra aquí o carga un archivo .lrc..."
         android:inputType="textMultiLine"
-        android:background="#1A1A1A"
-        android:textColor="#FFFFFF"
+        android:background="#000000" android:textColor="#FFFFFF"
         android:padding="10dp"
         android:scrollbars="vertical" />
 
