@@ -17,9 +17,9 @@ public class MainActivity extends Activity {
     EditText etLyrics;
     Button btnMark, btnPlayPause, btnSelect, btnSave, btnFwd, btnRew;
     Button btnUp, btnDown, btnLeft, btnRight, btnLoadLrc;
-    TextView tvTime;
+    TextView tvTime, tvKaraokeOverlay; // Añadido tvKaraokeOverlay
     SeekBar sbProgress; 
-    Switch swExportSrt; // Nuevo Switch para alternar entre LRC y SRT
+    Switch swExportSrt;
     String songName = "LetraSincronizada";
     boolean isUserSeeking = false; 
     boolean isMediaLoaded = false;
@@ -47,8 +47,10 @@ public class MainActivity extends Activity {
         btnRight = (Button) findViewById(R.id.btnRight);
         btnLoadLrc = (Button) findViewById(R.id.btnLoadLrc);
         
-        // Inicializamos el Switch (Asegúrate de agregarlo a tu main.xml con este ID si quieres controlarlo visualmente, o puedes setearlo por código)
         swExportSrt = (Switch) findViewById(R.id.swExportSrt);
+        
+        // Vinculamos la capa flotante de texto
+        tvKaraokeOverlay = (TextView) findViewById(R.id.tvKaraokeOverlay);
 
         videoContainer.setVisibility(View.GONE);
 
@@ -94,6 +96,7 @@ public class MainActivity extends Activity {
                     int newPos = videoView.getCurrentPosition() - 5000;
                     videoView.seekTo(Math.max(newPos, 0));
                     if (!isUserSeeking) sbProgress.setProgress(videoView.getCurrentPosition());
+                    refreshKaraoke(videoView.getCurrentPosition()); // Forzar actualización de letra
                 }
             }
         });
@@ -104,6 +107,7 @@ public class MainActivity extends Activity {
                     int newPos = videoView.getCurrentPosition() + 5000;
                     videoView.seekTo(Math.min(newPos, videoView.getDuration()));
                     if (!isUserSeeking) sbProgress.setProgress(videoView.getCurrentPosition());
+                    refreshKaraoke(videoView.getCurrentPosition()); // Forzar actualización de letra
                 }
             }
         });
@@ -144,6 +148,7 @@ public class MainActivity extends Activity {
                 if (fromUser && isMediaLoaded) {
                     videoView.seekTo(progress);
                     tvTime.setText(formatTimeLrc(progress));
+                    refreshKaraoke(progress); // Actualiza la letra dinámica si arrastras el dedo
                 }
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) { isUserSeeking = true; }
@@ -195,7 +200,6 @@ public class MainActivity extends Activity {
         String cleanLine = fullLine.matches("^\\[\\d{2}:\\d{2}\\.\\d{2}\\].*") 
                            ? fullLine.substring(10).trim() : fullLine.trim();
         
-        // Mantenemos las marcas internas en formato LRC en el EditText por comodidad de visualización de una sola línea
         String time = formatTimeLrc(videoView.getCurrentPosition());
         String newLine = time + " " + cleanLine;
 
@@ -210,7 +214,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // Formato nativo LRC: [mm:ss.xx]
     private String formatTimeLrc(int ms) {
         int m = (ms / 1000) / 60;
         int s = (ms / 1000) % 60;
@@ -218,7 +221,6 @@ public class MainActivity extends Activity {
         return String.format("[%02d:%02d.%02d]", m, s, mm);
     }
 
-    // Formato nativo SRT: hh:mm:ss,xxx
     private String formatTimeSrt(int ms) {
         int h = (ms / 1000) / 3600;
         int m = ((ms / 1000) % 3600) / 60;
@@ -227,18 +229,52 @@ public class MainActivity extends Activity {
         return String.format("%02d:%02d:%02d,%03d", h, m, s, msec);
     }
 
-    // Convierte un timestamp de LRC [mm:ss.xx] a milisegundos enteros
     private int lrcTimeToMs(String timestamp) {
         try {
             String clean = timestamp.replace("[", "").replace("]", "");
             String[] parts = clean.split(":");
             int min = Integer.parseInt(parts[0]);
             String[] secParts = parts[1].split("\\.");
-            int sec = Integer.parseInt(secParts[1]);
-            int msPart = Integer.parseInt(secParts[1]) * 10; // Centésimas a milisegundos
+            int sec = Integer.parseInt(secParts[0]);
+            int msPart = Integer.parseInt(secParts[1]) * 10;
             return (min * 60 * 1000) + (sec * 1000) + msPart;
         } catch (Exception e) {
             return 0;
+        }
+    }
+
+    // NUEVO MÉTODO: Analiza el texto actual del EditText y detecta la frase correspondiente al segundo exacto
+    private void refreshKaraoke(int currentMs) {
+        if (tvKaraokeOverlay == null) return;
+        
+        String text = etLyrics.getText().toString();
+        if (text.isEmpty()) {
+            tvKaraokeOverlay.setVisibility(View.GONE);
+            return;
+        }
+
+        String[] lines = text.split("\n");
+        String currentPhrase = "";
+
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (line.matches("^\\[\\d{2}:\\d{2}\\.\\d{2}\\].*")) {
+                String timestamp = line.substring(0, 10);
+                int startMs = lrcTimeToMs(timestamp);
+
+                if (currentMs >= startMs) {
+                    currentPhrase = line.substring(10).trim();
+                } else {
+                    break; // Como van en orden cronológico, paramos al encontrar un tiempo futuro
+                }
+            }
+        }
+
+        if (!currentPhrase.isEmpty()) {
+            tvKaraokeOverlay.setText(currentPhrase);
+            tvKaraokeOverlay.setVisibility(View.VISIBLE);
+        } else {
+            tvKaraokeOverlay.setVisibility(View.GONE);
         }
     }
 
@@ -249,6 +285,10 @@ public class MainActivity extends Activity {
             if (!isUserSeeking) {
                 sbProgress.setProgress(currentPos);
             }
+            
+            // Actualizamos dinámicamente la capa de Karaoke en tiempo real
+            refreshKaraoke(currentPos);
+
             tvTime.postDelayed(new Runnable() {
                 @Override public void run() { updateTimer(); }
             }, 100);
@@ -256,15 +296,11 @@ public class MainActivity extends Activity {
     }
 
     private void saveFile() {
-        // Verificamos el estado del Switch para decidir el formato de guardado
         boolean saveAsSrt = (swExportSrt != null && swExportSrt.isChecked());
-        
         try {
             if (saveAsSrt) {
-                // EXPORTACIÓN A FORMATO .SRT
                 File f = new File("/sdcard/Download/" + songName + ".srt");
                 PrintWriter pw = new PrintWriter(new FileWriter(f));
-                
                 String[] lines = etLyrics.getText().toString().split("\n");
                 int index = 1;
 
@@ -273,15 +309,12 @@ public class MainActivity extends Activity {
                     if (line.matches("^\\[\\d{2}:\\d{2}\\.\\d{2}\\].*")) {
                         String timestampLrc = line.substring(0, 10);
                         String text = line.substring(10).trim();
-                        
                         int startMs = lrcTimeToMs(timestampLrc);
                         int endMs;
                         
-                        // Si hay una línea siguiente con tiempo, el subtítulo actual termina donde empieza el próximo
                         if (i + 1 < lines.length && lines[i+1].trim().matches("^\\[\\d{2}:\\d{2}\\.\\d{2}\\].*")) {
                             endMs = lrcTimeToMs(lines[i+1].trim().substring(0, 10));
                         } else {
-                            // Si es la última frase, se mantiene visible por 4 segundos o hasta el final del video
                             endMs = startMs + 4000;
                             if (isMediaLoaded && endMs > videoView.getDuration()) {
                                 endMs = videoView.getDuration();
@@ -291,14 +324,13 @@ public class MainActivity extends Activity {
                         pw.println(index);
                         pw.println(formatTimeSrt(startMs) + " --> " + formatTimeSrt(endMs));
                         pw.println(text);
-                        pw.println(); // Línea en blanco obligatoria en SRT
+                        pw.println();
                         index++;
                     }
                 }
                 pw.close();
                 Toast.makeText(this, "Guardado SRT: " + songName + ".srt", Toast.LENGTH_SHORT).show();
             } else {
-                // GUARDADO TRADICIONAL EN FORMATO .LRC
                 File f = new File("/sdcard/Download/" + songName + ".lrc");
                 PrintWriter pw = new PrintWriter(new FileWriter(f));
                 pw.print(etLyrics.getText().toString());
@@ -333,10 +365,13 @@ public class MainActivity extends Activity {
                         sbProgress.setMax(videoView.getDuration());
                         sbProgress.setProgress(0);
                         
+                        // Si hay video, se muestra el overlay de Karaoke de inmediato al cargar
                         if (mp.getVideoWidth() == 0 || mp.getVideoHeight() == 0) {
                             videoContainer.setVisibility(View.GONE);
                         } else {
                             videoView.seekTo(1);
+                            tvKaraokeOverlay.setVisibility(View.VISIBLE);
+                            tvKaraokeOverlay.setText("Listo para reproducir");
                         }
                     }
                 });
@@ -369,6 +404,10 @@ public class MainActivity extends Activity {
                     extractSongName(uri);
                     btnLoadLrc.setText("📂 " + songName);
                     Toast.makeText(this, "LRC Cargado: " + songName, Toast.LENGTH_SHORT).show();
+                    
+                    // Si el video ya estaba cargado, actualiza la letra inmediatamente al leer el archivo
+                    if (isMediaLoaded) refreshKaraoke(videoView.getCurrentPosition());
+                    
                 } catch (Exception e) {
                     e.printStackTrace();
                     Toast.makeText(this, "Error al leer LRC", Toast.LENGTH_SHORT).show();
